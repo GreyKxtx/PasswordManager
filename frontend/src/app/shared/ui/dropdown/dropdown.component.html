@@ -1,0 +1,14 @@
+<div class="relative inline-block">
+  <div (click)="toggle()">
+    <ng-content select="[dropdown-trigger]"></ng-content>
+  </div>
+  @if (isOpen) {
+    <div
+      class="absolute z-50 mt-2 min-w-[8rem] overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-md"
+      [class.right-0]="true"
+    >
+      <ng-content select="ui-dropdown-item"></ng-content>
+    </div>
+  }
+</div>
+

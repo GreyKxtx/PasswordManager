@@ -1,0 +1,74 @@
+<div class="container mx-auto p-6 max-w-2xl">
+  <h1 class="text-3xl font-bold mb-6">Резервное копирование</h1>
+
+  <div class="space-y-6">
+    <ui-card>
+      <ui-card-header>
+        <ui-card-title>Экспорт</ui-card-title>
+      </ui-card-header>
+      <ui-card-content>
+        <p class="text-sm text-muted-foreground mb-4">
+          Скачайте зашифрованный backup вашего хранилища. Backup зашифрован Vault Key, расшифровать можно только при знании мастер-пароля.
+        </p>
+        <ui-button 
+          [disabled]="isExporting"
+          (click)="onExport()"
+        >
+          @if (isExporting) {
+            Экспорт...
+          } @else {
+            Скачать backup
+          }
+        </ui-button>
+      </ui-card-content>
+    </ui-card>
+
+    <ui-card>
+      <ui-card-header>
+        <ui-card-title>Импорт</ui-card-title>
+      </ui-card-header>
+      <ui-card-content>
+        <p class="text-sm text-muted-foreground mb-4">
+          Восстановите хранилище из backup файла. Существующие записи будут заменены импортированными.
+        </p>
+        <input 
+          type="file" 
+          accept=".json"
+          class="mb-4 block w-full text-sm text-muted-foreground file:mr-4 file:rounded-md file:border-0 file:bg-primary file:px-4 file:py-2 file:text-sm file:font-medium file:text-primary-foreground hover:file:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
+          (change)="onImport($event)"
+          [disabled]="isImporting"
+          id="import-file-input"
+        />
+        @if (isImporting) {
+          <p class="text-sm text-muted-foreground">Импорт...</p>
+        }
+      </ui-card-content>
+    </ui-card>
+  </div>
+
+  <!-- Диалог подтверждения импорта -->
+  <ui-dialog
+    [show]="showImportDialog"
+    title="Подтверждение импорта"
+    width="sm"
+    (close)="onCancelImport()"
+  >
+    <div class="space-y-4">
+      <p class="text-sm text-muted-foreground">
+        Импортировать <strong>{{ pendingImportItems.length }}</strong> записей?
+      </p>
+      <p class="text-xs text-muted-foreground">
+        Внимание: все существующие записи будут заменены импортированными.
+      </p>
+      <div class="flex justify-end gap-2">
+        <ui-button variant="outline" (click)="onCancelImport()">
+          Отмена
+        </ui-button>
+        <ui-button variant="danger" (click)="onConfirmImport()" [disabled]="isImporting">
+          Импортировать
+        </ui-button>
+      </div>
+    </div>
+  </ui-dialog>
+</div>
+

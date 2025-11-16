@@ -1,0 +1,94 @@
+<ui-dialog [show]="show" [title]="item ? 'Редактировать запись' : 'Новая запись'" width="2xl" (close)="onClose()">
+  <form [formGroup]="itemForm" (ngSubmit)="onSubmit()" class="space-y-4">
+    <div>
+      <ui-label for="title">Название *</ui-label>
+      <ui-input
+        id="title"
+        formControlName="title"
+        placeholder="Например: Gmail"
+        [invalid]="!!(itemForm.get('title')?.invalid && itemForm.get('title')?.touched)"
+      />
+      @if (itemForm.get('title')?.invalid && itemForm.get('title')?.touched) {
+        <p class="mt-1 text-sm text-destructive">Название обязательно</p>
+      }
+    </div>
+
+    <div>
+      <ui-label for="login">Логин / Email</ui-label>
+      <ui-input
+        id="login"
+        formControlName="login"
+        placeholder="user@example.com"
+      />
+    </div>
+
+    <div>
+      <div class="flex items-center justify-between">
+        <ui-label for="password">Пароль</ui-label>
+        <div class="flex gap-2">
+          <ui-button type="button" variant="ghost" size="sm" (click)="generatePassword()">
+            Сгенерировать
+          </ui-button>
+          <button
+            type="button"
+            class="text-sm text-muted-foreground hover:text-foreground"
+            (click)="togglePasswordVisibility()"
+          >
+            {{ showPassword ? 'Скрыть' : 'Показать' }}
+          </button>
+        </div>
+      </div>
+      <ui-input
+        id="password"
+        [type]="showPassword ? 'text' : 'password'"
+        formControlName="password"
+        placeholder="Введите пароль"
+      />
+    </div>
+
+    <div>
+      <ui-label for="url">URL</ui-label>
+      <ui-input
+        id="url"
+        formControlName="url"
+        type="url"
+        placeholder="https://example.com"
+      />
+    </div>
+
+    <div>
+      <ui-label for="note">Заметка</ui-label>
+      <textarea
+        id="note"
+        formControlName="note"
+        rows="3"
+        class="flex min-h-[60px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+        placeholder="Дополнительная информация..."
+      ></textarea>
+    </div>
+
+    <div>
+      <ui-label for="tags">Теги</ui-label>
+      <ui-input
+        id="tags"
+        formControlName="tags"
+        placeholder="work, personal (через запятую)"
+      />
+      <p class="mt-1 text-xs text-muted-foreground">Разделяйте теги запятыми</p>
+    </div>
+
+    <div class="flex justify-end gap-2 pt-4">
+      <ui-button type="button" variant="outline" (click)="onClose()">
+        Отмена
+      </ui-button>
+      <ui-button type="submit" [disabled]="itemForm.invalid || isSaving">
+        @if (isSaving) {
+          Сохранение...
+        } @else {
+          {{ item ? 'Сохранить' : 'Создать' }}
+        }
+      </ui-button>
+    </div>
+  </form>
+</ui-dialog>
+

@@ -1,0 +1,114 @@
+<div class="container mx-auto p-6 max-w-6xl">
+  <h1 class="text-3xl font-bold mb-6">Логи безопасности</h1>
+
+  <!-- Фильтры -->
+  <ui-card class="mb-6">
+    <ui-card-header>
+      <ui-card-title>Фильтры</ui-card-title>
+    </ui-card-header>
+    <ui-card-content>
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div>
+          <label class="block text-sm font-medium mb-2">Тип события</label>
+          <select
+            [(ngModel)]="selectedEventType"
+            (ngModelChange)="onFilterChange()"
+            class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+          >
+            @for (type of eventTypes; track type.value) {
+              <option [value]="type.value">{{ type.label }}</option>
+            }
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-2">С даты</label>
+          <input
+            type="date"
+            [(ngModel)]="startDate"
+            (ngModelChange)="onFilterChange()"
+            class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+          />
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-2">По дату</label>
+          <input
+            type="date"
+            [(ngModel)]="endDate"
+            (ngModelChange)="onFilterChange()"
+            class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+          />
+        </div>
+        <div class="flex items-end">
+          <ui-button variant="outline" (click)="startDate = ''; endDate = ''; selectedEventType = 'all'; onFilterChange()">
+            Сбросить
+          </ui-button>
+        </div>
+      </div>
+    </ui-card-content>
+  </ui-card>
+
+  <!-- Логи -->
+  <ui-card>
+    <ui-card-header>
+      <ui-card-title>События безопасности</ui-card-title>
+      <p class="text-sm text-muted-foreground mt-1">Всего записей: {{ total }}</p>
+    </ui-card-header>
+    <ui-card-content>
+      @if (isLoading && logs.length === 0) {
+        <div class="flex items-center justify-center py-12">
+          <p class="text-muted-foreground">Загрузка...</p>
+        </div>
+      } @else if (logs.length === 0) {
+        <div class="text-center py-12">
+          <p class="text-muted-foreground">Нет записей</p>
+        </div>
+      } @else {
+        <div class="space-y-3">
+          @for (log of logs; track log.logId) {
+            <div class="border rounded-lg p-4 hover:bg-accent/50 transition-colors">
+              <div class="flex items-start justify-between gap-4">
+                <div class="flex-1 space-y-2">
+                  <div class="flex items-center gap-2">
+                    <span
+                      [class]="'px-2 py-1 rounded text-xs font-medium ' + getEventTypeColor(log.eventType)"
+                    >
+                      {{ getEventTypeLabel(log.eventType) }}
+                    </span>
+                    <span class="text-sm text-muted-foreground">
+                      {{ formatDate(log.createdAt) }}
+                    </span>
+                  </div>
+                  <p class="text-sm">{{ log.description }}</p>
+                  <div class="flex flex-wrap gap-4 text-xs text-muted-foreground">
+                    @if (log.ip) {
+                      <span>IP: {{ log.ip }}</span>
+                    }
+                    @if (log.userAgent) {
+                      <span class="truncate max-w-md">{{ log.userAgent }}</span>
+                    }
+                  </div>
+                  @if (hasMetadata(log)) {
+                    <details class="text-xs">
+                      <summary class="cursor-pointer text-muted-foreground hover:text-foreground">
+                        Дополнительная информация
+                      </summary>
+                      <pre class="mt-2 p-2 bg-muted rounded text-xs overflow-auto">{{ formatMetadata(log.metadata) }}</pre>
+                    </details>
+                  }
+                </div>
+              </div>
+            </div>
+          }
+        </div>
+
+        @if (hasMore) {
+          <div class="mt-6 text-center">
+            <ui-button variant="outline" (click)="loadMore()" [disabled]="isLoading">
+              {{ isLoading ? 'Загрузка...' : 'Загрузить еще' }}
+            </ui-button>
+          </div>
+        }
+      }
+    </ui-card-content>
+  </ui-card>
+</div>

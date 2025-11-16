@@ -1,0 +1,81 @@
+### Smoke Tests для Backend API
+### Используйте REST Client extension в VS Code или аналогичный инструмент
+
+@baseUrl = http://localhost:3000
+@accessToken = 
+
+### 1. Health Check
+GET {{baseUrl}}/health
+
+### 2. Get Login Params (для несуществующего пользователя)
+GET {{baseUrl}}/api/auth/login/params?email=test@example.com
+
+### 3. Register (нужно сгенерировать данные на клиенте)
+# POST {{baseUrl}}/api/auth/register
+# Content-Type: application/json
+# 
+# {
+#   "email": "test@example.com",
+#   "passwordVerifier": "base64_verifier_here",
+#   "kdfParams": {
+#     "algorithm": "argon2id",
+#     "memory": 19456,
+#     "iterations": 2,
+#     "parallelism": 1,
+#     "salt": "base64_salt_here"
+#   },
+#   "vaultKeyEnc": "base64_encrypted_key",
+#   "vaultKeyEncIV": "base64_iv"
+# }
+
+### 4. Login (после регистрации)
+# POST {{baseUrl}}/api/auth/login
+# Content-Type: application/json
+# 
+# {
+#   "email": "test@example.com",
+#   "passwordVerifier": "base64_verifier_here"
+# }
+
+### 5. Get Vault Items (требует авторизации)
+GET {{baseUrl}}/api/vault/items
+Authorization: Bearer {{accessToken}}
+
+### 6. Get Vault Items без токена (должен вернуть 401)
+GET {{baseUrl}}/api/vault/items
+
+### 7. Get Vault Item с невалидным ID (должен вернуть 400)
+GET {{baseUrl}}/api/vault/items/abracadabra
+Authorization: Bearer {{accessToken}}
+
+### 8. Get Vault Item с валидным, но несуществующим ID (должен вернуть 404)
+GET {{baseUrl}}/api/vault/items/507f1f77bcf86cd799439011
+Authorization: Bearer {{accessToken}}
+
+### 9. Невалидный JSON в теле запроса (должен вернуть 400)
+POST {{baseUrl}}/api/auth/register
+Content-Type: application/json
+
+{
+  "email": "test@example.com",
+  "invalid": json here
+}
+
+### 10. Валидация через Zod (невалидный email)
+POST {{baseUrl}}/api/auth/register
+Content-Type: application/json
+
+{
+  "email": "not-an-email",
+  "passwordVerifier": "dGVzdA==",
+  "kdfParams": {
+    "algorithm": "argon2id",
+    "memory": 19456,
+    "iterations": 2,
+    "parallelism": 1,
+    "salt": "dGVzdA=="
+  },
+  "vaultKeyEnc": "dGVzdA==",
+  "vaultKeyEncIV": "dGVzdA=="
+}
+

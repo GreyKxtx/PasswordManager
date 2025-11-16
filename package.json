@@ -1,0 +1,29 @@
+{
+  "name": "password-manager",
+  "version": "1.0.0",
+  "description": "Безопасный облачный менеджер паролей с сквозным шифрованием",
+  "private": true,
+  "workspaces": [
+    "frontend",
+    "backend",
+    "extension",
+    "shared"
+  ],
+  "scripts": {
+    "install:all": "npm install && cd frontend && npm install && cd ../backend && npm install && cd ../extension && npm install",
+    "dev:frontend": "cd frontend && npm start",
+    "dev:backend": "cd backend && npm run dev",
+    "build:frontend": "cd frontend && npm run build",
+    "build:backend": "cd backend && npm run build",
+    "build:extension": "cd extension && npm run build"
+  },
+  "keywords": [
+    "password-manager",
+    "e2ee",
+    "security",
+    "cryptography"
+  ],
+  "author": "",
+  "license": "MIT"
+}
+

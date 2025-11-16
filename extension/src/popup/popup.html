@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Password Manager</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <!-- Экран логина -->
+  <div id="login-screen" class="screen">
+    <div class="container">
+      <h1>Password Manager</h1>
+      <form id="login-form">
+        <div class="form-group">
+          <label for="email">Email</label>
+          <input type="email" id="email" required autocomplete="email">
+        </div>
+        <div class="form-group">
+          <label for="password">Мастер-пароль</label>
+          <input type="password" id="password" required autocomplete="current-password">
+        </div>
+        <button type="submit" id="login-btn">Войти</button>
+        <div id="login-error" class="error"></div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Экран разблокирован -->
+  <div id="unlocked-screen" class="screen hidden">
+    <div class="container">
+      <div class="header">
+        <h2>Password Manager</h2>
+        <button id="logout-btn" class="btn-link">Выйти</button>
+      </div>
+
+      <div id="current-domain" class="domain-info"></div>
+
+      <div id="entries-list" class="entries-list"></div>
+
+      <div class="actions">
+        <button id="add-item-btn" class="btn-primary">+ Создать запись</button>
+        <button id="sync-btn" class="btn-secondary">Синхронизировать</button>
+        <button id="show-all-btn" class="btn-secondary">Показать все</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Экран всех записей -->
+  <div id="all-entries-screen" class="screen hidden">
+    <div class="container">
+      <div class="header">
+        <button id="back-btn" class="btn-link">← Назад</button>
+        <h2>Все записи</h2>
+        <button id="add-item-all-btn" class="btn-primary btn-small-header">+ Создать</button>
+      </div>
+      <div id="all-entries-list" class="entries-list"></div>
+    </div>
+  </div>
+
+  <!-- Форма создания/редактирования записи -->
+  <div id="item-form-screen" class="screen hidden">
+    <div class="container">
+      <div class="header">
+        <button id="form-back-btn" class="btn-link">← Назад</button>
+        <h2 id="form-title">Новая запись</h2>
+      </div>
+      <form id="item-form">
+        <div class="form-group">
+          <label for="item-title">Название *</label>
+          <input type="text" id="item-title" required>
+        </div>
+        <div class="form-group">
+          <label for="item-username">Логин / Email</label>
+          <input type="text" id="item-username">
+        </div>
+        <div class="form-group">
+          <label for="item-password">Пароль</label>
+          <div class="password-group">
+            <input type="password" id="item-password">
+            <button type="button" id="generate-password-btn" class="btn-small">Сгенерировать</button>
+            <button type="button" id="toggle-password-btn" class="btn-small">Показать</button>
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="item-url">URL</label>
+          <input type="url" id="item-url" placeholder="https://example.com">
+        </div>
+        <div class="form-group">
+          <label for="item-notes">Заметка</label>
+          <textarea id="item-notes" rows="3"></textarea>
+        </div>
+        <div class="form-group">
+          <label for="item-tags">Теги</label>
+          <input type="text" id="item-tags" placeholder="work, personal (через запятую)">
+          <p class="form-hint">Разделяйте теги запятыми</p>
+        </div>
+        <div class="form-actions">
+          <button type="button" id="form-cancel-btn" class="btn-secondary">Отмена</button>
+          <button type="submit" id="form-save-btn" class="btn-primary">Сохранить</button>
+        </div>
+        <div id="form-error" class="error"></div>
+      </form>
+    </div>
+  </div>
+
+  <script type="module" src="popup.js"></script>
+</body>
+</html>
+

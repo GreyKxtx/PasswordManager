@@ -1,0 +1,32 @@
+@if (show) {
+  <div
+    class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
+    (click)="onBackdropClick($event)"
+  >
+    <div
+      [class]="'bg-card rounded-lg shadow-lg p-6 ' + widthClasses"
+      (click)="$event.stopPropagation()"
+    >
+      <div class="flex items-center justify-between mb-4">
+        @if (title) {
+          <h2 class="text-xl font-semibold">{{ title }}</h2>
+        }
+        @if (showClose) {
+          <button
+            type="button"
+            class="text-muted-foreground hover:text-foreground"
+            (click)="onClose()"
+          >
+            <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        }
+      </div>
+      <div class="dialog-content">
+        <ng-content></ng-content>
+      </div>
+    </div>
+  </div>
+}
+

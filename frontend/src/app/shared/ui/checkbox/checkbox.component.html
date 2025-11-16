@@ -1,0 +1,16 @@
+<div class="flex items-center space-x-2">
+  <input
+    type="checkbox"
+    [id]="id"
+    [checked]="checked"
+    [disabled]="disabled"
+    (change)="toggle()"
+    class="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary disabled:cursor-not-allowed disabled:opacity-50"
+  />
+  @if (label) {
+    <label [for]="id" class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+      {{ label }}
+    </label>
+  }
+</div>
+

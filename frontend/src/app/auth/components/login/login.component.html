@@ -1,0 +1,77 @@
+<div class="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-background to-muted/20 p-4">
+  <ui-card class="w-full max-w-md shadow-xl border-2">
+    <ui-card-header class="space-y-1.5 pb-4">
+      <ui-card-title class="text-2xl font-bold">Вход в систему</ui-card-title>
+      <p class="text-sm text-muted-foreground">Введите свои учетные данные для входа</p>
+    </ui-card-header>
+    <ui-card-content>
+      <form [formGroup]="loginForm" (ngSubmit)="onSubmit()" class="space-y-4">
+        <div class="space-y-2">
+          <ui-label for="email">Email</ui-label>
+          <ui-input
+            id="email"
+            type="email"
+            placeholder="you@example.com"
+            formControlName="email"
+            [invalid]="!!(loginForm.get('email')?.invalid && loginForm.get('email')?.touched)"
+          />
+        </div>
+
+        <div class="space-y-2">
+          <ui-label for="password">Мастер-пароль</ui-label>
+          <div class="relative">
+            <ui-input
+              id="password"
+              [type]="showPassword ? 'text' : 'password'"
+              placeholder="Введите мастер-пароль"
+              formControlName="masterPassword"
+              [invalid]="!!(loginForm.get('masterPassword')?.invalid && loginForm.get('masterPassword')?.touched)"
+            />
+            <button
+              type="button"
+              class="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              (click)="togglePasswordVisibility()"
+            >
+              @if (showPassword) {
+                <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+                </svg>
+              } @else {
+                <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                </svg>
+              }
+            </button>
+          </div>
+        </div>
+
+        <div class="flex items-center space-x-2">
+          <input
+            type="checkbox"
+            id="rememberMe"
+            formControlName="rememberMe"
+            class="h-4 w-4 rounded border-input bg-white text-primary focus:ring-2 focus:ring-primary focus:ring-offset-2 checked:bg-primary checked:border-primary"
+          />
+          <label for="rememberMe" class="text-sm font-medium leading-none cursor-pointer">
+            Запомнить это устройство
+          </label>
+        </div>
+
+        <div style="margin-top: 15px;">
+          <ui-button type="submit" [disabled]="loginForm.invalid || isLoading" [fullWidth]="true">
+            @if (isLoading) {
+              <ui-spinner size="sm"></ui-spinner>
+            }
+            Войти
+          </ui-button>
+        </div>
+      </form>
+    </ui-card-content>
+    <ui-card-footer class="flex flex-col space-y-2">
+      <a routerLink="/auth/register" class="text-sm text-primary hover:underline text-center">
+        У меня нет аккаунта
+      </a>
+    </ui-card-footer>
+  </ui-card>
+</div>

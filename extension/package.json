@@ -1,0 +1,22 @@
+{
+  "name": "password-manager-extension",
+  "version": "1.0.0",
+  "description": "Browser extension for Password Manager",
+  "type": "module",
+  "scripts": {
+    "build": "tsc && npm run copy-files",
+    "copy-files": "npm run copy-manifest && npm run copy-popup && npm run copy-icons && npm run copy-argon2",
+    "copy-manifest": "node -e \"require('fs').copyFileSync('manifest.json', 'dist/manifest.json')\"",
+    "copy-popup": "node -e \"const fs=require('fs'),path=require('path');if(!fs.existsSync('dist/popup'))fs.mkdirSync('dist/popup',{recursive:true});['popup.html','popup.css'].forEach(f=>{if(fs.existsSync(`src/popup/${f}`))fs.copyFileSync(`src/popup/${f}`,`dist/popup/${f}`)})\"",
+    "copy-icons": "node -e \"const fs=require('fs'),path=require('path');if(!fs.existsSync('dist/icons'))fs.mkdirSync('dist/icons',{recursive:true});fs.readdirSync('icons').filter(f=>f.endsWith('.png')).forEach(f=>fs.copyFileSync(`icons/${f}`,`dist/icons/${f}`))\"",
+    "copy-argon2": "node scripts/copy-argon2.cjs",
+    "watch": "tsc --watch"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.0.268",
+    "typescript": "^5.3.3"
+  },
+  "dependencies": {
+    "@noble/hashes": "^1.3.3"
+  }
+}

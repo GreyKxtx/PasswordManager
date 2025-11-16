@@ -1,0 +1,59 @@
+<div class="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-background to-muted/20 p-4">
+  <ui-card class="w-full max-w-md shadow-xl border-2">
+    <ui-card-header class="space-y-1.5 pb-4">
+      <ui-card-title class="text-2xl font-bold">Регистрация</ui-card-title>
+      <p class="text-sm text-muted-foreground">Создайте новый аккаунт для безопасного хранения паролей</p>
+    </ui-card-header>
+    <ui-card-content>
+      <form [formGroup]="registerForm" (ngSubmit)="onSubmit()" class="space-y-4">
+        <div class="space-y-2">
+          <ui-label for="email">Email</ui-label>
+          <ui-input
+            id="email"
+            type="email"
+            placeholder="you@example.com"
+            formControlName="email"
+            [invalid]="!!(registerForm.get('email')?.invalid && registerForm.get('email')?.touched)"
+          />
+        </div>
+
+        <div class="space-y-2">
+          <ui-label for="password">Мастер-пароль</ui-label>
+          <ui-input
+            id="password"
+            [type]="showPassword ? 'text' : 'password'"
+            placeholder="Минимум 12 символов"
+            formControlName="masterPassword"
+            [invalid]="!!(registerForm.get('masterPassword')?.invalid && registerForm.get('masterPassword')?.touched)"
+          />
+        </div>
+
+        <div class="space-y-2">
+          <ui-label for="confirmPassword">Подтверждение пароля</ui-label>
+          <ui-input
+            id="confirmPassword"
+            [type]="showConfirmPassword ? 'text' : 'password'"
+            placeholder="Повторите мастер-пароль"
+            formControlName="confirmPassword"
+            [invalid]="!!(registerForm.get('confirmPassword')?.invalid && registerForm.get('confirmPassword')?.touched)"
+          />
+        </div>
+
+        <div class="rounded-md bg-muted p-4 text-sm text-muted-foreground">
+          <p class="font-semibold mb-2">Важно:</p>
+          <p>Мастер-пароль нельзя восстановить. От него зависит доступ ко всем вашим паролям.</p>
+        </div>
+
+        <ui-button type="submit" [disabled]="registerForm.invalid || isLoading" [fullWidth]="true">
+          Создать аккаунт
+        </ui-button>
+      </form>
+    </ui-card-content>
+    <ui-card-footer>
+      <a routerLink="/auth/login" class="text-sm text-primary hover:underline text-center w-full">
+        У меня уже есть аккаунт
+      </a>
+    </ui-card-footer>
+  </ui-card>
+</div>
+

@@ -1,0 +1,150 @@
+<div class="container mx-auto p-6 max-w-4xl">
+  <div class="mb-6 flex items-center justify-between">
+    <div>
+      <h1 class="text-3xl font-bold">Устройства и сессии</h1>
+      <p class="text-sm text-muted-foreground mt-1">
+        Управляйте активными сессиями на всех ваших устройствах
+      </p>
+    </div>
+    @if (getOtherSessionsCount() > 0) {
+      <ui-button variant="outline" (click)="onRevokeAllClick()">
+        Завершить все другие сессии ({{ getOtherSessionsCount() }})
+      </ui-button>
+    }
+  </div>
+
+  <ui-card>
+    <ui-card-header>
+      <ui-card-title>Активные сессии</ui-card-title>
+    </ui-card-header>
+    <ui-card-content>
+      @if (isLoading) {
+        <div class="flex items-center justify-center py-8">
+          <p class="text-muted-foreground">Загрузка...</p>
+        </div>
+      } @else if (sessions.length === 0) {
+        <p class="text-muted-foreground text-center py-8">Нет активных сессий</p>
+      } @else {
+        <div class="space-y-4">
+          @for (session of sessions; track session.jti) {
+            <div class="border rounded-lg p-4 hover:border-primary/20 transition-colors">
+              <div class="flex items-start justify-between">
+                <div class="flex-1 min-w-0">
+                  <div class="flex items-center gap-2 mb-3">
+                    <h3 class="font-semibold text-lg">{{ getDeviceName(session) }}</h3>
+                    @if (isCurrentSession(session)) {
+                      <span class="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded font-medium">
+                        Текущая сессия
+                      </span>
+                    }
+                  </div>
+                  <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
+                    @if (session.ip) {
+                      <div>
+                        <span class="text-muted-foreground">IP-адрес:</span>
+                        <span class="ml-2 font-mono">{{ session.ip }}</span>
+                      </div>
+                    }
+                    <div>
+                      <span class="text-muted-foreground">Создана:</span>
+                      <span class="ml-2">{{ formatDate(session.createdAt) }}</span>
+                    </div>
+                    <div>
+                      <span class="text-muted-foreground">Последняя активность:</span>
+                      <span class="ml-2">{{ formatDate(session.lastUsedAt) }}</span>
+                    </div>
+                    @if (session.jti) {
+                      <div class="md:col-span-2">
+                        <span class="text-muted-foreground">ID сессии:</span>
+                        <span class="ml-2 font-mono text-xs">{{ session.jti }}</span>
+                      </div>
+                    }
+                  </div>
+                </div>
+                @if (!isCurrentSession(session)) {
+                  <div class="ml-4 flex-shrink-0">
+                    <ui-button variant="outline" size="sm" (click)="onRevokeClick(session)">
+                      Завершить
+                    </ui-button>
+                  </div>
+                }
+              </div>
+            </div>
+          }
+        </div>
+      }
+    </ui-card-content>
+  </ui-card>
+
+  <!-- Диалог подтверждения завершения сессии -->
+  <ui-dialog
+    [show]="showRevokeDialog"
+    title="Подтверждение завершения сессии"
+    width="sm"
+    (close)="onCancelRevoke()"
+  >
+    <div class="space-y-4">
+      <p class="text-sm text-muted-foreground">
+        Вы уверены, что хотите завершить сессию на устройстве
+        <strong>"{{ sessionToRevoke ? getDeviceName(sessionToRevoke) : '' }}"</strong>?
+      </p>
+      @if (sessionToRevoke) {
+        <div class="bg-muted rounded-md p-3 text-sm space-y-1">
+          @if (sessionToRevoke.ip) {
+            <div>
+              <span class="text-muted-foreground">IP:</span>
+              <span class="ml-2 font-mono">{{ sessionToRevoke.ip }}</span>
+            </div>
+          }
+          <div>
+            <span class="text-muted-foreground">Последняя активность:</span>
+            <span class="ml-2">{{ formatDate(sessionToRevoke.lastUsedAt) }}</span>
+          </div>
+        </div>
+      }
+      <p class="text-xs text-muted-foreground">
+        После завершения сессии пользователь на этом устройстве будет автоматически разлогинен.
+      </p>
+      <div class="flex justify-end gap-2">
+        <ui-button variant="outline" (click)="onCancelRevoke()">
+          Отмена
+        </ui-button>
+        <ui-button variant="danger" (click)="onConfirmRevoke()">
+          Завершить сессию
+        </ui-button>
+      </div>
+    </div>
+  </ui-dialog>
+
+  <!-- Диалог подтверждения завершения всех сессий -->
+  <ui-dialog
+    [show]="showRevokeAllDialog"
+    title="Подтверждение завершения всех сессий"
+    width="sm"
+    (close)="onCancelRevokeAll()"
+  >
+    <div class="space-y-4">
+      <p class="text-sm text-muted-foreground">
+        Вы уверены, что хотите завершить все другие активные сессии?
+      </p>
+      <div class="bg-muted rounded-md p-3 text-sm">
+        <p class="font-medium mb-1">Будет завершено сессий: <strong>{{ getOtherSessionsCount() }}</strong></p>
+        <p class="text-muted-foreground text-xs">
+          Текущая сессия останется активной. Все остальные устройства будут автоматически разлогинены.
+        </p>
+      </div>
+      <p class="text-xs text-muted-foreground">
+        Это действие нельзя отменить. Пользователи на других устройствах должны будут войти заново.
+      </p>
+      <div class="flex justify-end gap-2">
+        <ui-button variant="outline" (click)="onCancelRevokeAll()">
+          Отмена
+        </ui-button>
+        <ui-button variant="danger" (click)="onConfirmRevokeAll()">
+          Завершить все сессии
+        </ui-button>
+      </div>
+    </div>
+  </ui-dialog>
+</div>
+
