@@ -5,6 +5,7 @@ import rateLimit from 'express-rate-limit';
 import { config } from './config/env';
 import { databaseManager } from './config/database';
 import authRoutes from './routes/auth.routes';
+import totpRoutes from './routes/totp.routes';
 import sessionRoutes from './routes/session.routes';
 import vaultRoutes from './routes/vault.routes';
 import auditRoutes from './routes/audit.routes';
@@ -56,6 +57,14 @@ const authLimiter = rateLimit({
 app.use('/api/auth/login', authLimiter);
 app.use('/api/auth/register', authLimiter);
 
+// Rate limiting для 2FA verify
+const twoFALimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10, // максимум 10 попыток проверки 2FA кода
+  message: 'Too many 2FA verification attempts, please try again later.',
+});
+app.use('/api/auth/2fa/verify', twoFALimiter);
+
 // Более мягкий rate limiting для vault endpoints (для частых операций)
 const vaultLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -66,6 +75,7 @@ app.use('/api/vault', vaultLimiter);
 
 // Routes
 app.use('/api/auth', authRoutes);
+app.use('/api/auth/totp', totpRoutes);
 app.use('/api/sessions', sessionRoutes);
 app.use('/api/vault', vaultRoutes);
 app.use('/api/audit', auditRoutes);

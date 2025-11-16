@@ -43,10 +43,59 @@ export class AuthService {
     return !!localStorage.getItem(this.TOKEN_KEY);
   }
 
-  login(credentials: LoginCryptoData): Observable<LoginResponse> {
-    return this.http.post<{ success: boolean; data: LoginResponse }>('/api/auth/login', credentials).pipe(
+  login(credentials: LoginCryptoData): Observable<LoginResponse | { require2FA: true; method: string; tempToken: string }> {
+    return this.http.post<{ success: boolean; data: LoginResponse | { require2FA: true; method: string; tempToken: string } }>('/api/auth/login', credentials).pipe(
       map(response => response.data),
       tap(async response => {
+        // Проверяем, требуется ли 2FA
+        if ('require2FA' in response && response.require2FA) {
+          // Сохраняем tempToken для последующей проверки 2FA
+          sessionStorage.setItem('temp_token_2fa', response.tempToken);
+          // Не устанавливаем токены и не меняем состояние аутентификации
+          return;
+        }
+        
+        // Обычный логин без 2FA
+        const loginResponse = response as LoginResponse;
+        this.setTokens({
+          accessToken: loginResponse.accessToken,
+          refreshToken: loginResponse.refreshToken,
+          tokenType: loginResponse.tokenType,
+          expiresIn: loginResponse.expiresIn,
+        });
+        this.setCurrentUser(loginResponse.user);
+        
+        // Сохраняем зашифрованный vaultKey для последующей расшифровки
+        localStorage.setItem(this.VAULT_KEY_KEY, loginResponse.vaultKeyEnc);
+        localStorage.setItem(this.VAULT_KEY_IV_KEY, loginResponse.vaultKeyEncIV);
+        
+        this.isAuthenticatedSubject.next(true);
+      }),
+      catchError(error => {
+        this.isAuthenticatedSubject.next(false);
+        return throwError(() => error);
+      })
+    );
+  }
+
+  /**
+   * Завершение логина с 2FA
+   */
+  verify2FA(code: string): Observable<LoginResponse> {
+    const tempToken = sessionStorage.getItem('temp_token_2fa');
+    if (!tempToken) {
+      return throwError(() => new Error('No temporary token found'));
+    }
+
+    return this.http.post<{ success: boolean; data: LoginResponse }>('/api/auth/2fa/verify', {
+      tempToken,
+      code,
+    }).pipe(
+      map(response => response.data),
+      tap(async response => {
+        // Удаляем tempToken
+        sessionStorage.removeItem('temp_token_2fa');
+        
         this.setTokens({
           accessToken: response.accessToken,
           refreshToken: response.refreshToken,
@@ -59,9 +108,6 @@ export class AuthService {
         localStorage.setItem(this.VAULT_KEY_KEY, response.vaultKeyEnc);
         localStorage.setItem(this.VAULT_KEY_IV_KEY, response.vaultKeyEncIV);
         
-        // TODO: Расшифровать vaultKey здесь, если есть passwordKey
-        // Пока сохраняем только зашифрованные данные
-        
         this.isAuthenticatedSubject.next(true);
       }),
       catchError(error => {
@@ -69,6 +115,21 @@ export class AuthService {
         return throwError(() => error);
       })
     );
+  }
+
+  /**
+   * Завершение логина (для использования после расшифровки vaultKey)
+   */
+  finishLogin(response: LoginResponse, vaultKey: CryptoKey): void {
+    this.setTokens({
+      accessToken: response.accessToken,
+      refreshToken: response.refreshToken,
+      tokenType: response.tokenType,
+      expiresIn: response.expiresIn,
+    });
+    this.setCurrentUser(response.user);
+    this.setVaultKey(vaultKey);
+    this.isAuthenticatedSubject.next(true);
   }
 
   register(data: RegisterCryptoData): Observable<{ userId: string }> {
@@ -107,6 +168,7 @@ export class AuthService {
     localStorage.removeItem(this.VAULT_KEY_KEY);
     localStorage.removeItem(this.VAULT_KEY_IV_KEY);
     sessionStorage.removeItem(this.VAULT_KEY_DECRYPTED_KEY);
+    sessionStorage.removeItem('temp_token_2fa'); // Очищаем tempToken для 2FA
     this.currentUserSubject.next(null);
     this.vaultKeySubject.next(null);
     this.isAuthenticatedSubject.next(false);

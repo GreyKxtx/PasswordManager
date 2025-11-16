@@ -14,6 +14,7 @@ export interface UserDocument extends Omit<IUser, 'userId'>, Document {
   vaultKeyEnc: string; // VaultKey, зашифрованный PasswordKey (base64)
   vaultKeyEncIV: string; // IV для шифрования VaultKey (base64)
   totpSecretEnc?: string; // Зашифрованный TOTP секрет (base64)
+  totpSecretEncIV?: string; // IV для шифрования TOTP секрета (base64)
   webauthnCredentials?: Array<{
     credId: string;
     publicKey: string;
@@ -60,6 +61,10 @@ const UserSchema = new Schema<UserDocument>(
       type: String,
       default: undefined,
     },
+    totpSecretEncIV: {
+      type: String,
+      default: undefined,
+    },
     webauthnCredentials: {
       type: [
         {
@@ -87,6 +92,7 @@ const UserSchema = new Schema<UserDocument>(
         delete ret.vaultKeyEnc;
         delete ret.vaultKeyEncIV;
         delete ret.totpSecretEnc;
+        delete ret.totpSecretEncIV;
         delete ret.webauthnCredentials;
         return ret;
       },

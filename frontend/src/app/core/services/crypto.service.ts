@@ -50,6 +50,7 @@ export class CryptoService {
     const hashBuffer = hashArray.buffer;
 
     // Импортируем результат Argon2id как CryptoKey
+    // extractable: true для возможности экспорта при необходимости (например, для 2FA)
     return crypto.subtle.importKey(
       'raw',
       hashBuffer,
@@ -57,7 +58,7 @@ export class CryptoService {
         name: 'AES-GCM',
         length: 256,
       },
-      false,
+      true, // extractable для экспорта при необходимости
       ['encrypt', 'decrypt']
     );
   }

@@ -9,12 +9,79 @@ const IV_LENGTH = 12; // 96 бит для GCM
  * Конвертация base64 в Uint8Array
  */
 function base64ToUint8Array(base64: string): Uint8Array {
-  const binaryString = atob(base64);
-  const bytes = new Uint8Array(binaryString.length);
-  for (let i = 0; i < binaryString.length; i++) {
-    bytes[i] = binaryString.charCodeAt(i);
+  // Проверяем входные данные
+  if (base64 === null || base64 === undefined) {
+    throw new Error(`Invalid base64 input: null or undefined. Type: ${typeof base64}`);
   }
-  return bytes;
+
+  if (typeof base64 !== 'string') {
+    throw new Error(`Invalid base64 input: expected string, got ${typeof base64}. Value: ${String(base64).substring(0, 100)}`);
+  }
+
+  if (base64.length === 0) {
+    throw new Error('Invalid base64 input: empty string');
+  }
+
+  // Удаляем пробелы и переносы строк
+  const cleaned = base64.trim().replace(/\s/g, '');
+
+  // Проверяем, что строка не пустая после очистки
+  if (cleaned.length === 0) {
+    throw new Error(`Invalid base64 input: empty string after cleaning. Original length: ${base64.length}, original preview: ${base64.substring(0, 50)}`);
+  }
+
+  // Проверяем базовую валидность base64 (только символы A-Z, a-z, 0-9, +, /, =)
+  // Base64 может содержать только эти символы и максимум 2 знака = в конце
+  const base64Regex = /^[A-Za-z0-9+/]*={0,2}$/;
+  if (!base64Regex.test(cleaned)) {
+    // Находим первый невалидный символ
+    const invalidCharIndex = cleaned.split('').findIndex(c => !/[A-Za-z0-9+/=]/.test(c));
+    const invalidChar = invalidCharIndex >= 0 ? cleaned[invalidCharIndex] : 'unknown';
+    const invalidCharCode = invalidCharIndex >= 0 ? cleaned.charCodeAt(invalidCharIndex) : -1;
+    
+    throw new Error(
+      `Invalid base64 string: contains invalid character "${invalidChar}" (code ${invalidCharCode}) at position ${invalidCharIndex}. ` +
+      `Input length: ${cleaned.length}, preview: ${cleaned.substring(0, 100)}`
+    );
+  }
+
+  // Проверяем длину (base64 строка должна быть кратной 4 после padding)
+  const paddingLength = (cleaned.match(/=/g) || []).length;
+  if (paddingLength > 2) {
+    throw new Error(`Invalid base64 string: too many padding characters (${paddingLength}). Max allowed: 2`);
+  }
+
+  try {
+    const binaryString = atob(cleaned);
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+    // Создаем новый ArrayBuffer и копируем данные для правильной типизации
+    const buffer = new ArrayBuffer(bytes.length);
+    const result = new Uint8Array(buffer);
+    result.set(bytes);
+    return result;
+  } catch (error) {
+    // Детальная информация об ошибке
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    const firstInvalidIndex = cleaned.split('').findIndex((c, i) => {
+      try {
+        // Пробуем декодировать до этого символа
+        atob(cleaned.substring(0, i + 1));
+        return false;
+      } catch {
+        return true;
+      }
+    });
+    
+    throw new Error(
+      `Failed to decode base64 string: ${errorMessage}. ` +
+      `Input length: ${cleaned.length}, ` +
+      `First invalid position: ${firstInvalidIndex >= 0 ? firstInvalidIndex : 'unknown'}, ` +
+      `Preview: ${cleaned.substring(0, 100)}`
+    );
+  }
 }
 
 /**
@@ -39,7 +106,13 @@ export async function computePasswordVerifier(
     throw new Error('Salt is required for key derivation');
   }
 
-  const salt = base64ToUint8Array(kdf.salt);
+  let salt: Uint8Array;
+  try {
+    salt = base64ToUint8Array(kdf.salt);
+  } catch (error) {
+    throw new Error(`Failed to decode salt: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+  
   const passwordBytes = new TextEncoder().encode(password);
 
   const hashResult = argon2id(passwordBytes, salt, {
@@ -64,7 +137,13 @@ export async function derivePasswordKey(
     throw new Error('Salt is required for key derivation');
   }
 
-  const salt = base64ToUint8Array(kdf.salt);
+  let salt: Uint8Array;
+  try {
+    salt = base64ToUint8Array(kdf.salt);
+  } catch (error) {
+    throw new Error(`Failed to decode salt: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+  
   const passwordBytes = new TextEncoder().encode(password);
 
   const hashResult = argon2id(passwordBytes, salt, {
@@ -97,13 +176,70 @@ export async function decryptVaultKey(
   iv: string, // base64
   passwordKey: CryptoKey
 ): Promise<CryptoKey> {
-  const encryptedData = new Uint8Array(base64ToUint8Array(vaultKeyEnc));
-  const ivBytes = new Uint8Array(base64ToUint8Array(iv));
+  // Проверяем входные данные
+  if (!vaultKeyEnc || typeof vaultKeyEnc !== 'string') {
+    throw new Error('Invalid vaultKeyEnc: must be a non-empty string');
+  }
+  if (!iv || typeof iv !== 'string') {
+    throw new Error('Invalid iv: must be a non-empty string');
+  }
+
+  console.log('[CRYPTO] decryptVaultKey called:', {
+    vaultKeyEncType: typeof vaultKeyEnc,
+    ivType: typeof iv,
+    vaultKeyEncLength: vaultKeyEnc?.length || 0,
+    ivLength: iv?.length || 0,
+    vaultKeyEncPreview: String(vaultKeyEnc).substring(0, 100),
+    ivPreview: String(iv).substring(0, 100),
+    vaultKeyEncFirstChars: String(vaultKeyEnc).split('').slice(0, 30).map(c => `${c}(${c.charCodeAt(0)})`).join(' '),
+    ivFirstChars: String(iv).split('').slice(0, 30).map(c => `${c}(${c.charCodeAt(0)})`).join(' '),
+  });
+
+  // Проверяем, что строки не пустые после очистки
+  const cleanedVaultKeyEnc = vaultKeyEnc.trim().replace(/\s/g, '');
+  const cleanedIV = iv.trim().replace(/\s/g, '');
+
+  if (cleanedVaultKeyEnc.length === 0) {
+    throw new Error('Invalid vaultKeyEnc: empty string after cleaning');
+  }
+  if (cleanedIV.length === 0) {
+    throw new Error('Invalid iv: empty string after cleaning');
+  }
+
+  let encryptedData: Uint8Array;
+  let ivBytes: Uint8Array;
+
+  try {
+    console.log('[CRYPTO] Decoding vaultKeyEnc...');
+    encryptedData = base64ToUint8Array(cleanedVaultKeyEnc);
+    console.log('[CRYPTO] vaultKeyEnc decoded successfully, length:', encryptedData.length);
+  } catch (error) {
+    console.error('[CRYPTO] Failed to decode vaultKeyEnc:', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+      inputLength: cleanedVaultKeyEnc.length,
+      inputPreview: cleanedVaultKeyEnc.substring(0, 100),
+    });
+    throw new Error(`Failed to decode vaultKeyEnc: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+
+  try {
+    console.log('[CRYPTO] Decoding iv...');
+    ivBytes = base64ToUint8Array(cleanedIV);
+    console.log('[CRYPTO] iv decoded successfully, length:', ivBytes.length);
+  } catch (error) {
+    console.error('[CRYPTO] Failed to decode iv:', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+      inputLength: cleanedIV.length,
+      inputPreview: cleanedIV.substring(0, 100),
+    });
+    throw new Error(`Failed to decode iv: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
 
   // Расшифровываем vaultKey (это зашифрованный JSON объект)
   const decryptedData = await crypto.subtle.decrypt(
     {
       name: 'AES-GCM',
+      // @ts-expect-error - TypeScript strict typing issue with Uint8Array in Web Crypto API
       iv: ivBytes,
       tagLength: 128, // 128 бит для GCM
     },
@@ -180,13 +316,34 @@ export async function decryptSecret(
   encryptedData: string, // base64
   iv: string // base64
 ): Promise<VaultSecretData> {
-  const encryptedBytes = new Uint8Array(base64ToUint8Array(encryptedData));
-  const ivBytes = new Uint8Array(base64ToUint8Array(iv));
+  // Проверяем входные данные
+  if (!encryptedData || typeof encryptedData !== 'string') {
+    throw new Error('Invalid encryptedData: must be a non-empty string');
+  }
+  if (!iv || typeof iv !== 'string') {
+    throw new Error('Invalid iv: must be a non-empty string');
+  }
+
+  let encryptedBytes: Uint8Array;
+  let ivBytes: Uint8Array;
+
+  try {
+    encryptedBytes = base64ToUint8Array(encryptedData);
+  } catch (error) {
+    throw new Error(`Failed to decode encryptedData: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+
+  try {
+    ivBytes = base64ToUint8Array(iv);
+  } catch (error) {
+    throw new Error(`Failed to decode iv: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
 
   // Расшифровываем данные
   const decryptedData = await crypto.subtle.decrypt(
     {
       name: 'AES-GCM',
+      // @ts-expect-error - TypeScript strict typing issue with Uint8Array in Web Crypto API
       iv: ivBytes,
     },
     vaultKey,

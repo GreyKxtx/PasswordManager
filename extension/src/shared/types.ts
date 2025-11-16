@@ -52,6 +52,12 @@ export interface LoginResponse {
   };
 }
 
+export interface Login2FAResponse {
+  require2FA: true;
+  method: string;
+  tempToken: string;
+}
+
 // Типы для создания и обновления записей
 export interface CreateVaultItemPayload {
   title: string;
@@ -78,6 +84,7 @@ export type Message =
   | { type: 'PING' }
   | { type: 'CHECK_AUTH' }
   | { type: 'LOGIN'; email: string; password: string }
+  | { type: 'VERIFY_2FA'; code: string }
   | { type: 'LOGOUT' }
   | { type: 'GET_ENTRIES_FOR_DOMAIN'; domain: string }
   | { type: 'GET_ALL_ENTRIES' }

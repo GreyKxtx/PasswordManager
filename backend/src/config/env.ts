@@ -36,8 +36,13 @@ export const config = {
     secret: requireEnv('JWT_SECRET'),
     accessExpiresIn: getEnv('JWT_ACCESS_EXPIRES_IN', '15m'),
     refreshExpiresIn: getEnv('JWT_REFRESH_EXPIRES_IN', '7d'),
+    tempTokenExpiresIn: getEnv('JWT_TEMP_TOKEN_EXPIRES_IN', '10m'), // Для 2FA temp token
   },
   cors: {
     origin: getEnv('CORS_ORIGIN', 'http://localhost:4200'),
+  },
+  totp: {
+    encKey: requireEnv('TOTP_ENC_KEY'), // 32 байта base64 для AES-256-GCM
+    appName: getEnv('TOTP_APP_NAME', 'Password Manager'),
   },
 };

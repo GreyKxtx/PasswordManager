@@ -1,5 +1,5 @@
 import { computePasswordVerifier, derivePasswordKey, decryptVaultKey, decryptSecret, encryptSecret, extractDomain, matchesDomain } from '../shared/crypto.js';
-import { getLoginParams, login as apiLogin, getVaultItems, refreshToken as apiRefreshToken, createVaultItem, updateVaultItem, deleteVaultItem } from '../shared/api.js';
+import { getLoginParams, login as apiLogin, verify2FA as apiVerify2FA, getVaultItems, refreshToken as apiRefreshToken, createVaultItem, updateVaultItem, deleteVaultItem } from '../shared/api.js';
 
 // Локальные типы (не импортируем из types.js, так как он пустой после компиляции)
 interface VaultItemDecrypted {
@@ -29,6 +29,7 @@ type Message =
   | { type: 'PING' }
   | { type: 'CHECK_AUTH' }
   | { type: 'LOGIN'; email: string; password: string }
+  | { type: 'VERIFY_2FA'; code: string }
   | { type: 'LOGOUT' }
   | { type: 'GET_ENTRIES_FOR_DOMAIN'; domain: string }
   | { type: 'GET_ALL_ENTRIES' }
@@ -48,6 +49,8 @@ interface ExtensionState {
   vaultKey: CryptoKey | null;
   vaultItems: VaultItemDecrypted[];
   domainIndex: Record<string, VaultItemDecrypted[]>; // domain -> entries[]
+  tempToken2FA: string | null; // Временный токен для 2FA
+  passwordKeyFor2FA: CryptoKey | null; // passwordKey для расшифровки vaultKey после 2FA
 }
 
 let state: ExtensionState = {
@@ -56,6 +59,8 @@ let state: ExtensionState = {
   vaultKey: null,
   vaultItems: [],
   domainIndex: {},
+  tempToken2FA: null,
+  passwordKeyFor2FA: null,
 };
 
 /**
@@ -157,7 +162,7 @@ async function saveTokens(): Promise<void> {
 /**
  * Логин пользователя
  */
-async function performLogin(email: string, password: string): Promise<void> {
+async function performLogin(email: string, password: string): Promise<{ require2FA?: boolean; tempToken?: string }> {
   try {
     // 1. Получаем KDF параметры
     const kdfParams = await getLoginParams(email);
@@ -169,41 +174,88 @@ async function performLogin(email: string, password: string): Promise<void> {
       throw new Error('Пользователь с таким email не найден. Проверьте правильность email или зарегистрируйтесь.');
     }
 
-    console.log('[BACKGROUND] KDF params received:', {
-      algorithm: kdfParams.algorithm,
-      memory: kdfParams.memory,
-      iterations: kdfParams.iterations,
-      parallelism: kdfParams.parallelism,
-      saltLength: kdfParams.salt?.length || 0,
-    });
-
     // 2. Вычисляем passwordVerifier
     const passwordVerifier = await computePasswordVerifier(password, kdfParams);
 
     // 3. Выполняем логин
     const loginResponse = await apiLogin(email, passwordVerifier);
 
-    // 4. Сохраняем токены
+    // 4. Проверяем, требуется ли 2FA
+    if ('require2FA' in loginResponse && loginResponse.require2FA) {
+      // Сохраняем tempToken и вычисляем passwordKey для последующего использования
+      state.tempToken2FA = loginResponse.tempToken;
+      state.passwordKeyFor2FA = await derivePasswordKey(password, kdfParams);
+      return { require2FA: true, tempToken: loginResponse.tempToken };
+    }
+
+    // 5. Обычный логин без 2FA
+    const loginData = loginResponse as any; // LoginResponse
+
+    // Проверяем, что у нас есть необходимые данные
+    if (!loginData.vaultKeyEnc || !loginData.vaultKeyEncIV) {
+      throw new Error('Missing vaultKeyEnc or vaultKeyEncIV in login response');
+    }
+
+    // 6. Сохраняем токены
+    state.accessToken = loginData.accessToken;
+    state.refreshToken = loginData.refreshToken;
+    await saveTokens();
+
+    // 7. Вычисляем passwordKey
+    const passwordKey = await derivePasswordKey(password, kdfParams);
+
+    // 8. Расшифровываем vaultKey
+    state.vaultKey = await decryptVaultKey(
+      loginData.vaultKeyEnc,
+      loginData.vaultKeyEncIV,
+      passwordKey
+    );
+
+    // 9. Синхронизируем vault
+    await syncVault();
+
+    return {};
+  } catch (error) {
+    console.error('[BACKGROUND] Login error:', error);
+    throw error;
+  }
+}
+
+/**
+ * Завершение логина с 2FA
+ */
+async function performVerify2FA(code: string): Promise<void> {
+  try {
+    if (!state.tempToken2FA || !state.passwordKeyFor2FA) {
+      throw new Error('2FA session not found. Please login again.');
+    }
+
+    // 1. Верифицируем 2FA код
+    const loginResponse = await apiVerify2FA(state.tempToken2FA, code);
+
+    // 2. Сохраняем токены
     state.accessToken = loginResponse.accessToken;
     state.refreshToken = loginResponse.refreshToken;
     await saveTokens();
 
-    // 5. Вычисляем passwordKey
-    const passwordKey = await derivePasswordKey(password, kdfParams);
-
-    // 6. Расшифровываем vaultKey
+    // 3. Расшифровываем vaultKey используя сохраненный passwordKey
     state.vaultKey = await decryptVaultKey(
       loginResponse.vaultKeyEnc,
       loginResponse.vaultKeyEncIV,
-      passwordKey
+      state.passwordKeyFor2FA
     );
 
-    // 7. Синхронизируем vault
-    await syncVault();
+    // 4. Очищаем временные данные 2FA
+    state.tempToken2FA = null;
+    state.passwordKeyFor2FA = null;
 
-    console.log('[BACKGROUND] Login successful');
+    // 5. Синхронизируем vault
+    await syncVault();
   } catch (error) {
-    console.error('[BACKGROUND] Login error:', error);
+    console.error('[BACKGROUND] 2FA verification error:', error);
+    // Очищаем временные данные при ошибке
+    state.tempToken2FA = null;
+    state.passwordKeyFor2FA = null;
     throw error;
   }
 }
@@ -217,6 +269,8 @@ async function performLogout(): Promise<void> {
   state.vaultKey = null;
   state.vaultItems = [];
   state.domainIndex = {};
+  state.tempToken2FA = null;
+  state.passwordKeyFor2FA = null;
 
   await chrome.storage.local.remove(['accessToken', 'refreshToken']);
   console.log('[BACKGROUND] Logout successful');
@@ -276,16 +330,7 @@ async function syncVault(): Promise<void> {
     state.vaultItems = decryptedItems;
 
     // Строим индекс по доменам
-    state.domainIndex = {};
-    for (const item of decryptedItems) {
-      if (item.url) {
-        const domain = extractDomain(item.url);
-        if (!state.domainIndex[domain]) {
-          state.domainIndex[domain] = [];
-        }
-        state.domainIndex[domain].push(item);
-      }
-    }
+    rebuildDomainIndex();
 
     console.log(`[BACKGROUND] Vault synced: ${decryptedItems.length} items`);
   } catch (error: any) {
@@ -300,6 +345,50 @@ async function syncVault(): Promise<void> {
       return syncVault();
     }
     throw error;
+  }
+}
+
+/**
+ * Перестроение индекса доменов
+ */
+function rebuildDomainIndex(): void {
+  state.domainIndex = {};
+  for (const item of state.vaultItems) {
+    if (item.url) {
+      const domain = extractDomain(item.url);
+      if (!state.domainIndex[domain]) {
+        state.domainIndex[domain] = [];
+      }
+      state.domainIndex[domain].push(item);
+    }
+  }
+}
+
+/**
+ * Добавление элемента в индекс доменов
+ */
+function addItemToDomainIndex(item: VaultItemDecrypted): void {
+  if (item.url) {
+    const domain = extractDomain(item.url);
+    if (!state.domainIndex[domain]) {
+      state.domainIndex[domain] = [];
+    }
+    state.domainIndex[domain].push(item);
+  }
+}
+
+/**
+ * Удаление элемента из индекса доменов
+ */
+function removeItemFromDomainIndex(itemId: string, url?: string): void {
+  if (url) {
+    const domain = extractDomain(url);
+    if (state.domainIndex[domain]) {
+      state.domainIndex[domain] = state.domainIndex[domain].filter(item => item.id !== itemId);
+      if (state.domainIndex[domain].length === 0) {
+        delete state.domainIndex[domain];
+      }
+    }
   }
 }
 
@@ -323,6 +412,24 @@ function getEntriesForDomain(domain: string): VaultItemDecrypted[] {
  */
 function getAllEntries(): VaultItemDecrypted[] {
   return [...state.vaultItems];
+}
+
+/**
+ * Проверка авторизации с отправкой ответа об ошибке
+ * @param sendResponse - функция для отправки ответа
+ * @param requireVaultKey - требуется ли наличие vaultKey (по умолчанию true)
+ * @returns true если авторизован, false если нет (ответ уже отправлен)
+ */
+async function requireAuth(
+  sendResponse: (response: MessageResponse) => void,
+  requireVaultKey: boolean = true
+): Promise<boolean> {
+  const isAuth = await checkAuth();
+  if (!isAuth || (requireVaultKey && !state.vaultKey)) {
+    sendResponse({ success: false, error: 'Not authenticated' });
+    return false;
+  }
+  return true;
 }
 
 /**
@@ -353,7 +460,16 @@ chrome.runtime.onMessage.addListener(
             break;
 
           case 'LOGIN':
-            await performLogin(message.email, message.password);
+            const loginResult = await performLogin(message.email, message.password);
+            if (loginResult.require2FA) {
+              sendResponse({ success: true, data: { require2FA: true, tempToken: loginResult.tempToken } });
+            } else {
+              sendResponse({ success: true });
+            }
+            break;
+
+          case 'VERIFY_2FA':
+            await performVerify2FA(message.code);
             sendResponse({ success: true });
             break;
 
@@ -363,10 +479,7 @@ chrome.runtime.onMessage.addListener(
             break;
 
           case 'GET_ENTRIES_FOR_DOMAIN':
-            // Проверяем авторизацию перед получением записей
-            const isAuthForDomain = await checkAuth();
-            if (!isAuthForDomain || !state.vaultKey) {
-              sendResponse({ success: false, error: 'Not authenticated' });
+            if (!(await requireAuth(sendResponse))) {
               return;
             }
             const domainEntries = getEntriesForDomain(message.domain);
@@ -374,10 +487,7 @@ chrome.runtime.onMessage.addListener(
             break;
 
           case 'GET_ALL_ENTRIES':
-            // Проверяем авторизацию перед получением записей
-            const isAuthForAll = await checkAuth();
-            if (!isAuthForAll || !state.vaultKey) {
-              sendResponse({ success: false, error: 'Not authenticated' });
+            if (!(await requireAuth(sendResponse))) {
               return;
             }
             const allEntries = getAllEntries();
@@ -385,10 +495,7 @@ chrome.runtime.onMessage.addListener(
             break;
 
           case 'SYNC_VAULT':
-            // Проверяем авторизацию перед синхронизацией
-            const isAuthBeforeSync = await checkAuth();
-            if (!isAuthBeforeSync) {
-              sendResponse({ success: false, error: 'Not authenticated' });
+            if (!(await requireAuth(sendResponse, false))) {
               return;
             }
             await syncVault();
@@ -396,10 +503,7 @@ chrome.runtime.onMessage.addListener(
             break;
 
           case 'CREATE_ITEM':
-            // Проверяем авторизацию
-            const isAuthBeforeCreate = await checkAuth();
-            if (!isAuthBeforeCreate || !state.vaultKey) {
-              sendResponse({ success: false, error: 'Not authenticated' });
+            if (!(await requireAuth(sendResponse))) {
               return;
             }
             try {
@@ -408,7 +512,7 @@ chrome.runtime.onMessage.addListener(
                 password: message.item.password || '',
                 notes: message.item.notes,
               };
-              const encrypted = await encryptSecret(state.vaultKey, secretData);
+              const encrypted = await encryptSecret(state.vaultKey!, secretData);
               
               // Создаем запись на сервере
               const createdItem = await createVaultItem(state.accessToken!, {
@@ -422,7 +526,7 @@ chrome.runtime.onMessage.addListener(
               });
               
               // Расшифровываем для кэша
-              const decryptedSecret = await decryptSecret(state.vaultKey, createdItem.encryptedData, createdItem.iv);
+              const decryptedSecret = await decryptSecret(state.vaultKey!, createdItem.encryptedData, createdItem.iv);
               const decryptedItem: VaultItemDecrypted = {
                 id: createdItem.id,
                 title: createdItem.title,
@@ -435,13 +539,7 @@ chrome.runtime.onMessage.addListener(
               
               // Обновляем кэш
               state.vaultItems.push(decryptedItem);
-              if (decryptedItem.url) {
-                const domain = extractDomain(decryptedItem.url);
-                if (!state.domainIndex[domain]) {
-                  state.domainIndex[domain] = [];
-                }
-                state.domainIndex[domain].push(decryptedItem);
-              }
+              addItemToDomainIndex(decryptedItem);
               
               sendResponse({ success: true, data: decryptedItem });
             } catch (error: any) {
@@ -451,10 +549,7 @@ chrome.runtime.onMessage.addListener(
             break;
 
           case 'UPDATE_ITEM':
-            // Проверяем авторизацию
-            const isAuthBeforeUpdate = await checkAuth();
-            if (!isAuthBeforeUpdate || !state.vaultKey) {
-              sendResponse({ success: false, error: 'Not authenticated' });
+            if (!(await requireAuth(sendResponse))) {
               return;
             }
             try {
@@ -480,7 +575,7 @@ chrome.runtime.onMessage.addListener(
                   password: updatedData.password || '',
                   notes: updatedData.notes,
                 };
-                const encrypted = await encryptSecret(state.vaultKey, secretData);
+                const encrypted = await encryptSecret(state.vaultKey!, secretData);
                 encryptedData = encrypted.encryptedData;
                 iv = encrypted.iv;
               }
@@ -497,7 +592,7 @@ chrome.runtime.onMessage.addListener(
               const updatedItem = await updateVaultItem(state.accessToken!, message.id, payload);
               
               // Расшифровываем для кэша
-              const decryptedSecret = await decryptSecret(state.vaultKey, updatedItem.encryptedData, updatedItem.iv);
+              const decryptedSecret = await decryptSecret(state.vaultKey!, updatedItem.encryptedData, updatedItem.iv);
               const decryptedUpdatedItem: VaultItemDecrypted = {
                 id: updatedItem.id,
                 title: updatedItem.title,
@@ -511,18 +606,13 @@ chrome.runtime.onMessage.addListener(
               // Обновляем кэш
               const index = state.vaultItems.findIndex(item => item.id === message.id);
               if (index !== -1) {
+                const oldItem = state.vaultItems[index];
                 state.vaultItems[index] = decryptedUpdatedItem;
-              }
-              
-              // Обновляем индекс доменов
-              state.domainIndex = {};
-              for (const item of state.vaultItems) {
-                if (item.url) {
-                  const domain = extractDomain(item.url);
-                  if (!state.domainIndex[domain]) {
-                    state.domainIndex[domain] = [];
-                  }
-                  state.domainIndex[domain].push(item);
+                
+                // Обновляем индекс доменов только если URL изменился
+                if (oldItem.url !== decryptedUpdatedItem.url) {
+                  removeItemFromDomainIndex(message.id, oldItem.url);
+                  addItemToDomainIndex(decryptedUpdatedItem);
                 }
               }
               
@@ -534,10 +624,7 @@ chrome.runtime.onMessage.addListener(
             break;
 
           case 'DELETE_ITEM':
-            // Проверяем авторизацию
-            const isAuthBeforeDelete = await checkAuth();
-            if (!isAuthBeforeDelete) {
-              sendResponse({ success: false, error: 'Not authenticated' });
+            if (!(await requireAuth(sendResponse, false))) {
               return;
             }
             try {
@@ -548,15 +635,9 @@ chrome.runtime.onMessage.addListener(
               const itemToDelete = state.vaultItems.find(item => item.id === message.id);
               state.vaultItems = state.vaultItems.filter(item => item.id !== message.id);
               
-              // Обновляем индекс доменов
-              if (itemToDelete && itemToDelete.url) {
-                const domain = extractDomain(itemToDelete.url);
-                if (state.domainIndex[domain]) {
-                  state.domainIndex[domain] = state.domainIndex[domain].filter(item => item.id !== message.id);
-                  if (state.domainIndex[domain].length === 0) {
-                    delete state.domainIndex[domain];
-                  }
-                }
+              // Удаляем из индекса доменов
+              if (itemToDelete) {
+                removeItemFromDomainIndex(message.id, itemToDelete.url);
               }
               
               sendResponse({ success: true });

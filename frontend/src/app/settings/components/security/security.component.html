@@ -1,0 +1,141 @@
+<div class="container mx-auto p-6 max-w-2xl">
+  <h1 class="text-3xl font-bold mb-6">Безопасность</h1>
+  <div class="space-y-6">
+    <ui-card>
+      <ui-card-header>
+        <ui-card-title>Мастер-пароль</ui-card-title>
+      </ui-card-header>
+      <ui-card-content>
+        <ui-button variant="outline">Изменить мастер-пароль</ui-button>
+      </ui-card-content>
+    </ui-card>
+
+    <ui-card>
+      <ui-card-header>
+        <ui-card-title>Двухфакторная аутентификация (TOTP)</ui-card-title>
+      </ui-card-header>
+      <ui-card-content>
+        @if (twoFactorEnabled) {
+          <div class="space-y-4">
+            <p class="text-sm text-muted-foreground mb-4">
+              TOTP включена. При входе в аккаунт потребуется код из приложения.
+            </p>
+            <ui-button variant="danger" (click)="openDisableDialog()" [disabled]="isLoading">
+              Отключить TOTP
+            </ui-button>
+          </div>
+        } @else {
+          <div class="space-y-4">
+            <p class="text-sm text-muted-foreground mb-4">
+              Двухфакторная аутентификация отключена.
+            </p>
+            <ui-button (click)="startTotpSetup()" [disabled]="isLoading">
+              @if (isLoading) {
+                <ui-spinner />
+              } @else {
+                Включить TOTP
+              }
+            </ui-button>
+          </div>
+        }
+      </ui-card-content>
+    </ui-card>
+  </div>
+
+  <!-- Диалог настройки TOTP -->
+  <ui-dialog [show]="showSetupDialog" (close)="cancelSetup()" title="Настройка TOTP">
+    <div class="space-y-4">
+      <p class="text-sm text-muted-foreground">
+        1. Отсканируйте QR-код в приложении-аутентификаторе (Google Authenticator, Authy и т.д.)
+      </p>
+      
+      @if (otpauthUrl) {
+        <div class="flex justify-center p-4 bg-white rounded-lg">
+          <ui-qrcode [data]="otpauthUrl" [width]="256" [errorCorrectionLevel]="'M'"></ui-qrcode>
+        </div>
+      }
+      
+      <div class="space-y-2">
+        <p class="text-sm font-medium">Или введите секрет вручную:</p>
+        <div class="p-3 bg-muted rounded-md font-mono text-sm break-all">
+          {{ secretBase32 }}
+        </div>
+        <button
+          type="button"
+          class="text-sm text-primary hover:underline"
+          (click)="copySecret()"
+        >
+          Копировать секрет
+        </button>
+      </div>
+      
+      <p class="text-sm text-muted-foreground">
+        2. Введите 6-значный код из приложения для подтверждения:
+      </p>
+      
+      <form [formGroup]="confirmCodeForm" (ngSubmit)="confirmTotpSetup()" class="space-y-4">
+        <div class="space-y-2">
+          <ui-label for="confirm-code">Код из приложения</ui-label>
+          <ui-input
+            id="confirm-code"
+            type="text"
+            placeholder="000000"
+            formControlName="code"
+            maxlength="6"
+            [invalid]="!!(confirmCodeForm.get('code')?.invalid && confirmCodeForm.get('code')?.touched)"
+          />
+        </div>
+        
+        <div class="flex gap-2 justify-end">
+          <ui-button type="button" variant="outline" (click)="cancelSetup()" [disabled]="isLoading">
+            Отмена
+          </ui-button>
+          <ui-button type="submit" [disabled]="confirmCodeForm.invalid || isLoading">
+            @if (isLoading) {
+              <ui-spinner />
+            } @else {
+              Подтвердить
+            }
+          </ui-button>
+        </div>
+      </form>
+    </div>
+  </ui-dialog>
+
+  <!-- Диалог отключения TOTP -->
+  <ui-dialog [show]="showDisableDialog" (close)="cancelDisable()" title="Отключение TOTP">
+    <div class="space-y-4">
+      <p class="text-sm text-muted-foreground">
+        Для отключения двухфакторной аутентификации введите код из приложения:
+      </p>
+      
+      <form [formGroup]="disableCodeForm" (ngSubmit)="disableTotp()" class="space-y-4">
+        <div class="space-y-2">
+          <ui-label for="disable-code">Код из приложения</ui-label>
+          <ui-input
+            id="disable-code"
+            type="text"
+            placeholder="000000"
+            formControlName="code"
+            maxlength="6"
+            [invalid]="!!(disableCodeForm.get('code')?.invalid && disableCodeForm.get('code')?.touched)"
+          />
+        </div>
+        
+        <div class="flex gap-2 justify-end">
+          <ui-button type="button" variant="outline" (click)="cancelDisable()" [disabled]="isLoading">
+            Отмена
+          </ui-button>
+          <ui-button type="submit" variant="danger" [disabled]="disableCodeForm.invalid || isLoading">
+            @if (isLoading) {
+              <ui-spinner />
+            } @else {
+              Отключить
+            }
+          </ui-button>
+        </div>
+      </form>
+    </div>
+  </ui-dialog>
+</div>
+

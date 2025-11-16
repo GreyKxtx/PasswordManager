@@ -1,31 +1,43 @@
 <div class="min-h-screen flex items-center justify-center bg-background p-4">
-  <ui-card class="w-full max-w-md">
-    <ui-card-header>
-      <ui-card-title>Двухфакторная аутентификация</ui-card-title>
-    </ui-card-header>
-    <ui-card-content>
-      <form [formGroup]="totpForm" (ngSubmit)="onSubmit()" class="space-y-4">
-        <p class="text-sm text-muted-foreground mb-4">
-          Введите 6-значный код из приложения-аутентификатора
-        </p>
+  @if (hasTempToken) {
+    <ui-card class="w-full max-w-md">
+      <ui-card-header>
+        <ui-card-title>Двухфакторная аутентификация</ui-card-title>
+      </ui-card-header>
+      <ui-card-content>
+        <form [formGroup]="totpForm" (ngSubmit)="onSubmit()" class="space-y-4">
+          <p class="text-sm text-muted-foreground mb-4">
+            Введите 6-значный код из приложения-аутентификатора
+          </p>
 
-        <div class="space-y-2">
-          <ui-label for="code">Код</ui-label>
-          <ui-input
-            id="code"
-            type="text"
-            placeholder="000000"
-            formControlName="code"
-            [invalid]="!!(totpForm.get('code')?.invalid && totpForm.get('code')?.touched)"
-            maxlength="6"
-          />
-        </div>
+          <div class="space-y-2">
+            <ui-label for="code">Код</ui-label>
+            <ui-input
+              id="code"
+              type="text"
+              placeholder="000000"
+              formControlName="code"
+              [invalid]="!!(totpForm.get('code')?.invalid && totpForm.get('code')?.touched)"
+              maxlength="6"
+            />
+          </div>
 
-        <ui-button type="submit" [disabled]="totpForm.invalid" [fullWidth]="true">
-          Подтвердить
-        </ui-button>
-      </form>
-    </ui-card-content>
-  </ui-card>
+          <ui-button type="submit" [disabled]="totpForm.invalid || isLoading" [fullWidth]="true">
+            @if (isLoading) {
+              <ui-spinner />
+            } @else {
+              Подтвердить
+            }
+          </ui-button>
+        </form>
+      </ui-card-content>
+    </ui-card>
+  } @else {
+    <ui-card class="w-full max-w-md">
+      <ui-card-content>
+        <p class="text-center text-muted-foreground">Загрузка...</p>
+      </ui-card-content>
+    </ui-card>
+  }
 </div>
 

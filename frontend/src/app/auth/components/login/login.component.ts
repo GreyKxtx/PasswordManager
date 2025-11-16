@@ -10,7 +10,7 @@ import { UiSpinnerComponent } from '../../../shared/ui/spinner/spinner.component
 import { AuthService } from '../../../core/services/auth.service';
 import { CryptoService } from '../../../core/services/crypto.service';
 import { ToastService } from '../../../shared/ui/toast/toast.service';
-import { LoginCryptoData } from '@password-manager/shared/types';
+import { LoginCryptoData, LoginResponse } from '@password-manager/shared/types';
 import { environment } from '../../../../environments/environment';
 
 @Component({
@@ -88,11 +88,31 @@ export class LoginComponent {
 
       this.authService.login(loginData).subscribe({
         next: async (response) => {
+          // Проверяем, требуется ли 2FA
+          if ('require2FA' in response && response.require2FA) {
+            // Сохраняем passwordKey для последующей расшифровки vaultKey после 2FA
+            // Используем sessionStorage, так как это временные данные
+            try {
+              const passwordKeyBase64 = await this.cryptoService.exportKey(passwordKey);
+              sessionStorage.setItem('password_key_temp', passwordKeyBase64);
+            } catch (error) {
+              console.error('Error saving password key:', error);
+            }
+            
+            this.isLoading = false;
+            // Редирект на страницу 2FA
+            this.router.navigate(['/auth/2fa']);
+            return;
+          }
+          
+          // Обычный логин без 2FA
+          const loginResponse = response as LoginResponse;
+          
           // Расшифровываем vaultKey после успешного логина
           try {
             const vaultKeyEncrypted = {
-              iv: response.vaultKeyEncIV,
-              ciphertext: response.vaultKeyEnc,
+              iv: loginResponse.vaultKeyEncIV,
+              ciphertext: loginResponse.vaultKeyEnc,
             };
             
             const vaultKeyData = await this.cryptoService.decryptJson<{ key: string }>(passwordKey, vaultKeyEncrypted);

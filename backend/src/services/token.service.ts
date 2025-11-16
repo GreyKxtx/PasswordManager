@@ -44,6 +44,60 @@ export class TokenService {
   }
 
   /**
+   * Генерация временного токена для 2FA
+   * @param userId - ID пользователя
+   * @param purpose - назначение токена ('2fa')
+   * @param method - метод 2FA ('TOTP')
+   */
+  signTempToken(userId: string, purpose: string = '2fa', method: string = 'TOTP'): string {
+    const tokenPayload = {
+      sub: userId,
+      purpose,
+      method,
+    };
+
+    return jwt.sign(
+      tokenPayload,
+      jwtConfig.secret,
+      {
+        expiresIn: jwtConfig.tempTokenTtl,
+      } as jwt.SignOptions
+    );
+  }
+
+  /**
+   * Верификация временного токена для 2FA
+   * @throws {TokenExpiredError} если токен истек
+   * @throws {TokenInvalidError} если токен невалиден или purpose/method не совпадают
+   */
+  verifyTempToken(token: string, expectedPurpose: string = '2fa', expectedMethod: string = 'TOTP'): { userId: string; purpose: string; method: string } {
+    try {
+      const decoded = jwt.verify(token, jwtConfig.secret) as jwt.JwtPayload & { purpose?: string; method?: string };
+      
+      if (decoded.purpose !== expectedPurpose) {
+        throw new TokenInvalidError('Invalid token purpose');
+      }
+      
+      if (decoded.method !== expectedMethod) {
+        throw new TokenInvalidError('Invalid token method');
+      }
+      
+      return {
+        userId: decoded.sub as string,
+        purpose: decoded.purpose!,
+        method: decoded.method!,
+      };
+    } catch (error: any) {
+      if (error.name === 'TokenExpiredError' || error instanceof TokenExpiredError) {
+        throw new TokenExpiredError('Temporary token expired');
+      } else if (error.name === 'JsonWebTokenError' || error instanceof TokenInvalidError) {
+        throw new TokenInvalidError('Invalid temporary token');
+      }
+      throw new TokenInvalidError('Failed to verify temporary token');
+    }
+  }
+
+  /**
    * Генерация пары токенов (access + refresh)
    */
   generateTokens(payload: JwtPayload): AuthTokens {

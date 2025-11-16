@@ -4,6 +4,7 @@ import { UserModel } from '../models/User';
 import { RegisterCryptoData, LoginCryptoData, LoginResponse, AuthTokens, User } from '@password-manager/shared/types';
 import { TokenService } from './token.service';
 import { SessionService, SessionMetadata } from './session.service';
+import { TotpService } from './totp.service';
 import { JwtPayload } from '../types/jwt.types';
 
 export class AuthService {
@@ -70,8 +71,9 @@ export class AuthService {
 
   /**
    * Вход пользователя
+   * Если у пользователя включена 2FA, возвращает require2FA: true и tempToken
    */
-  async login(data: LoginCryptoData, metadata?: SessionMetadata): Promise<LoginResponse> {
+  async login(data: LoginCryptoData, metadata?: SessionMetadata): Promise<LoginResponse | { require2FA: true; method: string; tempToken: string }> {
     // Находим пользователя по email
     const user = await UserModel.findOne({ email: data.email.toLowerCase() });
     if (!user) {
@@ -87,8 +89,88 @@ export class AuthService {
       throw new Error('Invalid email or password');
     }
 
-    // Security log: успешный вход
+    // Если 2FA включена, возвращаем tempToken вместо обычных токенов
+    if (user.twoFactorEnabled) {
+      // Генерируем временный токен для 2FA
+      const tempToken = this.tokenService.signTempToken(user._id.toString(), '2fa', 'TOTP');
+      
+      // Security log: требуется 2FA
+      console.log('[AUTH] Login requires 2FA:', data.email.toLowerCase());
+      
+      return {
+        require2FA: true,
+        method: 'TOTP',
+        tempToken,
+      };
+    }
+
+    // Security log: успешный вход (без 2FA)
     console.log('[AUTH] Login successful:', data.email.toLowerCase());
+
+    // Генерируем jti для сессии
+    const jti = randomUUID();
+    const deviceId = metadata?.deviceId || randomUUID();
+
+    // Создаем payload с jti и deviceId
+    const payload: JwtPayload = {
+      sub: user._id.toString(),
+      jti,
+      deviceId,
+    };
+
+    // Генерируем токены через TokenService
+    const tokens = this.tokenService.generateTokens(payload);
+
+    // Создаем сессию
+    await this.sessionService.createSession(user._id.toString(), payload, metadata || {});
+
+    // Формируем ответ
+    const userResponse: User = {
+      userId: user._id.toString(),
+      email: user.email,
+      twoFactorEnabled: user.twoFactorEnabled,
+      createdAt: user.createdAt,
+    };
+
+    return {
+      ...tokens,
+      vaultKeyEnc: user.vaultKeyEnc,
+      vaultKeyEncIV: user.vaultKeyEncIV,
+      user: userResponse,
+    };
+  }
+
+  /**
+   * Завершение логина с 2FA
+   * Проверяет TOTP код и выдает обычные токены
+   */
+  async completeLoginWith2FA(tempToken: string, totpCode: string, metadata?: SessionMetadata): Promise<LoginResponse> {
+    const totpService = new TotpService();
+    
+    // Верифицируем временный токен
+    const tempTokenData = this.tokenService.verifyTempToken(tempToken, '2fa', 'TOTP');
+    
+    // Находим пользователя
+    const user = await UserModel.findById(tempTokenData.userId);
+    if (!user) {
+      throw new Error('User not found');
+    }
+
+    // Проверяем, что 2FA включена
+    if (!user.twoFactorEnabled || !user.totpSecretEnc || !user.totpSecretEncIV) {
+      throw new Error('2FA is not enabled for this user');
+    }
+
+    // Расшифровываем TOTP секрет
+    const rawSecret = totpService.decryptSecret(user.totpSecretEnc, user.totpSecretEncIV);
+    
+    // Проверяем TOTP код
+    if (!totpService.verifyCode(rawSecret, totpCode, 1)) {
+      throw new Error('Invalid 2FA code');
+    }
+
+    // Security log: успешный вход с 2FA
+    console.log('[AUTH] Login successful with 2FA:', user.email);
 
     // Генерируем jti для сессии
     const jti = randomUUID();

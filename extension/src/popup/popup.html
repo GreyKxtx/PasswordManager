@@ -26,6 +26,23 @@
     </div>
   </div>
 
+  <!-- Экран 2FA -->
+  <div id="two-factor-screen" class="screen hidden">
+    <div class="container">
+      <h1>Двухфакторная аутентификация</h1>
+      <form id="two-factor-form">
+        <div class="form-group">
+          <label for="two-factor-code">Код из приложения</label>
+          <input type="text" id="two-factor-code" required maxlength="6" pattern="[0-9]{6}" placeholder="000000">
+          <p class="form-hint">Введите 6-значный код из приложения-аутентификатора</p>
+        </div>
+        <button type="submit" id="verify-2fa-btn">Подтвердить</button>
+        <button type="button" id="back-to-login-btn" class="btn-secondary">Назад</button>
+        <div id="two-factor-error" class="error"></div>
+      </form>
+    </div>
+  </div>
+
   <!-- Экран разблокирован -->
   <div id="unlocked-screen" class="screen hidden">
     <div class="container">

@@ -3,6 +3,8 @@ import mongoose, { Schema, Document } from 'mongoose';
 export type AuditEventType =
   | 'login_success'
   | 'login_failed'
+  | 'login_2fa_required'
+  | 'login_2fa_failed'
   | 'logout'
   | 'register'
   | 'password_change'
@@ -13,7 +15,12 @@ export type AuditEventType =
   | 'session_revoked_all'
   | 'token_refresh'
   | 'unauthorized_access'
-  | 'security_settings_changed';
+  | 'security_settings_changed'
+  | 'totp_setup_started'
+  | 'totp_enabled'
+  | 'totp_enable_failed'
+  | 'totp_disabled'
+  | 'totp_disable_failed';
 
 export interface AuditLogDocument extends Document {
   _id: mongoose.Types.ObjectId;
@@ -40,6 +47,8 @@ const AuditLogSchema = new Schema<AuditLogDocument>(
       enum: [
         'login_success',
         'login_failed',
+        'login_2fa_required',
+        'login_2fa_failed',
         'logout',
         'register',
         'password_change',
@@ -51,6 +60,11 @@ const AuditLogSchema = new Schema<AuditLogDocument>(
         'token_refresh',
         'unauthorized_access',
         'security_settings_changed',
+        'totp_setup_started',
+        'totp_enabled',
+        'totp_enable_failed',
+        'totp_disabled',
+        'totp_disable_failed',
       ],
       index: true,
     },

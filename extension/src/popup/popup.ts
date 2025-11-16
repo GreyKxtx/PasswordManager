@@ -2,6 +2,7 @@ import { Message, MessageResponse, VaultItemDecrypted } from '../shared/types';
 
 // Элементы DOM
 const loginScreen = document.getElementById('login-screen')!;
+const twoFactorScreen = document.getElementById('two-factor-screen')!;
 const unlockedScreen = document.getElementById('unlocked-screen')!;
 const allEntriesScreen = document.getElementById('all-entries-screen')!;
 
@@ -10,6 +11,12 @@ const emailInput = document.getElementById('email') as HTMLInputElement;
 const passwordInput = document.getElementById('password') as HTMLInputElement;
 const loginBtn = document.getElementById('login-btn') as HTMLButtonElement;
 const loginError = document.getElementById('login-error')!;
+
+const twoFactorForm = document.getElementById('two-factor-form') as HTMLFormElement;
+const twoFactorCodeInput = document.getElementById('two-factor-code') as HTMLInputElement;
+const verify2FABtn = document.getElementById('verify-2fa-btn') as HTMLButtonElement;
+const backToLoginBtn = document.getElementById('back-to-login-btn')!;
+const twoFactorError = document.getElementById('two-factor-error')!;
 
 const logoutBtn = document.getElementById('logout-btn')!;
 const currentDomainEl = document.getElementById('current-domain')!;
@@ -129,6 +136,7 @@ chrome.runtime.onMessage.addListener((message: any, sender, sendResponse) => {
 function showLoginScreen(): void {
   console.log('[POPUP] Showing login screen');
   loginScreen.classList.remove('hidden');
+  twoFactorScreen.classList.add('hidden');
   unlockedScreen.classList.add('hidden');
   allEntriesScreen.classList.add('hidden');
   // Очищаем поля ввода
@@ -139,10 +147,25 @@ function showLoginScreen(): void {
 }
 
 /**
+ * Показать экран 2FA
+ */
+function showTwoFactorScreen(): void {
+  console.log('[POPUP] Showing 2FA screen');
+  loginScreen.classList.add('hidden');
+  twoFactorScreen.classList.remove('hidden');
+  unlockedScreen.classList.add('hidden');
+  allEntriesScreen.classList.add('hidden');
+  // Очищаем поле ввода кода
+  twoFactorCodeInput.value = '';
+  hideTwoFactorError();
+}
+
+/**
  * Показать экран разблокирован
  */
 function showUnlockedScreen(): void {
   loginScreen.classList.add('hidden');
+  twoFactorScreen.classList.add('hidden');
   unlockedScreen.classList.remove('hidden');
   allEntriesScreen.classList.add('hidden');
 }
@@ -152,6 +175,7 @@ function showUnlockedScreen(): void {
  */
 function showAllEntriesScreen(): void {
   loginScreen.classList.add('hidden');
+  twoFactorScreen.classList.add('hidden');
   unlockedScreen.classList.add('hidden');
   allEntriesScreen.classList.remove('hidden');
 }
@@ -182,8 +206,13 @@ loginForm.addEventListener('submit', async (e) => {
     });
 
     if (response.success) {
-      showUnlockedScreen();
-      await loadCurrentDomainEntries();
+      // Проверяем, требуется ли 2FA
+      if (response.data && response.data.require2FA) {
+        showTwoFactorScreen();
+      } else {
+        showUnlockedScreen();
+        await loadCurrentDomainEntries();
+      }
     } else {
       showError(response.error || 'Ошибка входа');
     }
@@ -193,6 +222,50 @@ loginForm.addEventListener('submit', async (e) => {
     loginBtn.disabled = false;
     loginBtn.textContent = 'Войти';
   }
+});
+
+/**
+ * Обработка 2FA
+ */
+twoFactorForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  
+  const code = twoFactorCodeInput.value.trim();
+
+  if (!code || !/^\d{6}$/.test(code)) {
+    showTwoFactorError('Введите 6-значный код');
+    return;
+  }
+
+  verify2FABtn.disabled = true;
+  verify2FABtn.textContent = 'Проверка...';
+  hideTwoFactorError();
+
+  try {
+    const response = await sendMessage({
+      type: 'VERIFY_2FA',
+      code,
+    });
+
+    if (response.success) {
+      showUnlockedScreen();
+      await loadCurrentDomainEntries();
+    } else {
+      showTwoFactorError(response.error || 'Неверный код');
+    }
+  } catch (error: any) {
+    showTwoFactorError(error.message || 'Ошибка проверки кода');
+  } finally {
+    verify2FABtn.disabled = false;
+    verify2FABtn.textContent = 'Подтвердить';
+  }
+});
+
+/**
+ * Назад к логину
+ */
+backToLoginBtn.addEventListener('click', () => {
+  showLoginScreen();
 });
 
 /**
@@ -452,6 +525,23 @@ function showError(message: string): void {
 function hideError(): void {
   loginError.classList.remove('show');
   loginError.style.display = 'none';
+}
+
+/**
+ * Показать ошибку 2FA
+ */
+function showTwoFactorError(message: string): void {
+  twoFactorError.textContent = message;
+  twoFactorError.style.display = 'block';
+  twoFactorError.classList.add('show');
+}
+
+/**
+ * Скрыть ошибку 2FA
+ */
+function hideTwoFactorError(): void {
+  twoFactorError.classList.remove('show');
+  twoFactorError.style.display = 'none';
 }
 
 /**

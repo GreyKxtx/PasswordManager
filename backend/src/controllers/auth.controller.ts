@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import { AuthService } from '../services/auth.service';
 import { AuditService } from '../services/audit.service';
 import { registerSchema, loginSchema, refreshTokenSchema } from '../utils/validation';
-import { RegisterCryptoData, LoginCryptoData } from '@password-manager/shared/types';
+import { RegisterCryptoData, LoginCryptoData, LoginResponse } from '@password-manager/shared/types';
 import { TokenExpiredError, TokenInvalidError } from '../utils/token-errors';
 import { AuthenticatedRequest } from '../types/express';
 import { UserModel } from '../models/User';
@@ -91,12 +91,32 @@ export class AuthController {
 
       const result = await authService.login(data, metadata);
       
-      // Логируем успешный вход
+      // Проверяем, требуется ли 2FA
+      if ('require2FA' in result && result.require2FA) {
+        // Логируем требование 2FA
+        await auditService.logFromRequest(
+          req,
+          'login_2fa_required',
+          `Login requires 2FA: ${data.email}`,
+          undefined,
+          { email: data.email }
+        );
+        
+        res.status(200).json({
+          success: true,
+          data: result,
+        });
+        return;
+      }
+      
+      // Логируем успешный вход (без 2FA)
+      const loginResult = result as LoginResponse;
       await auditService.logFromRequest(
         req,
         'login_success',
         `User logged in: ${data.email}`,
-        result.user.userId
+        loginResult.user.userId,
+        { twoFactor: false }
       );
       
       res.status(200).json({
@@ -287,6 +307,82 @@ export class AuthController {
       logger.error('Get login params error', {
         error: error instanceof Error ? error.message : 'Unknown error',
         email: req.query.email as string,
+      });
+      res.status(500).json({
+        success: false,
+        error: 'Internal server error',
+      });
+    }
+  }
+
+  /**
+   * POST /auth/2fa/verify
+   * Завершение логина с 2FA
+   */
+  async verify2FA(req: AuthenticatedRequest, res: Response): Promise<void> {
+    try {
+      const { tempToken, code } = req.body;
+
+      if (!tempToken || !code) {
+        res.status(400).json({
+          success: false,
+          error: 'tempToken and code are required',
+        });
+        return;
+      }
+
+      // Валидация кода
+      if (typeof code !== 'string' || !/^\d{6}$/.test(code)) {
+        res.status(400).json({
+          success: false,
+          error: 'Invalid code format',
+        });
+        return;
+      }
+
+      // Извлекаем метаданные для сессии
+      const metadata = {
+        ip: req.ip || req.socket.remoteAddress,
+        userAgent: req.headers['user-agent'],
+      };
+
+      const result = await authService.completeLoginWith2FA(tempToken, code, metadata);
+      
+      // Логируем успешный вход с 2FA
+      await auditService.logFromRequest(
+        req,
+        'login_success',
+        `User logged in with 2FA: ${result.user.email}`,
+        result.user.userId,
+        { twoFactor: 'TOTP' }
+      );
+      
+      res.status(200).json({
+        success: true,
+        data: result,
+      });
+    } catch (error: unknown) {
+      if (error instanceof Error) {
+        if (error.message === 'Invalid 2FA code' || error.message.includes('Invalid temporary token')) {
+          // Логируем неудачную попытку
+          await auditService.logFromRequest(
+            req,
+            'login_2fa_failed',
+            '2FA verification failed',
+            undefined,
+            { ip: req.ip, userAgent: req.headers['user-agent'] }
+          );
+          
+          res.status(401).json({
+            success: false,
+            error: 'Invalid 2FA code',
+          });
+          return;
+        }
+      }
+      
+      logger.error('2FA verify error', {
+        error: error instanceof Error ? error.message : 'Unknown error',
       });
       res.status(500).json({
         success: false,
